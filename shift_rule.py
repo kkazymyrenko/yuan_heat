@@ -63,7 +63,7 @@ def hess(par,*k,**kw):
     return hessian
 
 # qbits number
-nqb = 14
+nqb = 5
 
 # number of ansatz parameters
 num_para = nqb*2
@@ -124,7 +124,7 @@ for ii in range(num_para):
         para_shift = np.zeros(num_para)
         para_shift[ii] += np.pi
         para_shift[jj] += np.pi
-#        test[ii,jj] = hess(init_para,qc,f)[ii,jj] + (f @ Statevector(qc.assign_parameters(init_para + para_shift)).data.real)/4
+        if num_para<10 : test[ii,jj] = hess(init_para,qc,f)[ii,jj] + (f @ Statevector(qc.assign_parameters(init_para + para_shift)).data.real)/4
 
 print("TEST Hessian", np.linalg.norm(test).round(6)==0)
 #print(np.round(test,3))
@@ -132,30 +132,32 @@ print("TEST Hessian", np.linalg.norm(test).round(6)==0)
 print("Initial value of cost : ", cost_func(init_para))
 print("Initial gradient of cost : ", 2*drv(init_para))
 
-eigenvalues, eigenvectors = np.linalg.eig(hess(init_para,qc,f))
-print("Eigen Values",eigenvalues)
+# first optimization of the initial state, that is based on gradient at the initial state
+for kk in range(10):
+    # compute the vector of derivative
+    init_drv = drv(init_para)
+    # get the index of max value of derivative, we use it to define our new init state
+    iindex = np.argmax(np.abs(init_drv))
+    # if some component of the gradient is bigger then the initial cost_func, then use it as a new guess
+    if abs(cost_func(init_para)) < 2.*abs(init_drv[iindex]) :
+        init_para[iindex] += np.pi
+        # if it is positive instead of negative then shift it by 2pi to change the sign of cost_func
+        if cost_func(init_para) > 0 : init_para[iindex] += 2*np.pi
+    else : break
+    print("################### LOOP ",kk)
+    print("Value of cost : ", cost_func(init_para))
+    print("Gradient of cost : ", np.round(2*drv(init_para),3))
+    eigenvalues, eigenvectors = np.linalg.eig(hess(init_para,qc,f))
+    print("Eigen Values of the Hessian",np.round(eigenvalues,3))
 
-
-
-
-exit()
-# for kk in range(10):
-#     init_drv = drv(init_para)
-#     iindex = np.argmax(np.abs(init_drv))
-#     if abs(cost_func(init_para))/2. < abs(init_drv[iindex]) :
-#         init_para[iindex] += np.pi
-#         if cost_func(init_para) > 0 : init_para[iindex] += 2*np.pi
-#     else : break
-#     print("################### LOOP ",kk)
-#     print("Value of cost : ", cost_func(init_para))
-#     print("Gradient of cost : ", np.round(2*drv(init_para),3))
-#     eigenvalues, eigenvectors = np.linalg.eig(hess(init_para,qc,f))
-#     print("Eigen Values",np.round(eigenvalues,3))
-
+# some wiard (not working) optimizer
+# same as previous, but we try to set an alternative minimization
 stp=0 
 while abs(cost_func(init_para)) < 0.9:
     stp +=1
+    # compute the vector of derivative
     init_drv = drv(init_para)
+    # get the index of max value of derivative, it is our new init state
     iindex = np.argmax(np.abs(init_drv))
     if abs(cost_func(init_para))/2. < abs(init_drv[iindex]) :
         init_para[iindex] += np.pi
@@ -165,6 +167,7 @@ while abs(cost_func(init_para)) < 0.9:
         if abs(cost_func(init_para))<1e-5 : 
             init_para[kk] += np.pi 
         else : 
+            # compute the real minimum
             init_para[kk] = 2*np.arctan(init_drv[kk]/cost_func(init_para))
         if cost_func(init_para) > 0 : init_para[kk] += 2*np.pi
         print("################### LOOP ",kk, stp)
@@ -182,6 +185,10 @@ BC = [[-2*np.pi, 2*np.pi] for _ in range(num_para)]
 # #                          method='L-BFGS-B',jac=drv)
 #                            method='Newton-CG', jac=drv, hess=hess )
 # res_opt = res.x
+
+##################################
+# reference solution with nlopt algorithm
+###########################
 import nlopt
 
 par0 = init_para
